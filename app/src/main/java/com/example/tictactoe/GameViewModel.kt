@@ -6,7 +6,10 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 
 class GameViewModel : ViewModel() {
-    var state by mutableStateOf(GameState())
+    var state by mutableStateOf(GameState(startingPlayer = BoardCellValue.CIRCLE))
+
+    private var isComputerPlaying = false
+
 
     val boardItems: MutableMap<Int, BoardCellValue> = mutableMapOf(
         1 to BoardCellValue.NONE,
@@ -21,13 +24,21 @@ class GameViewModel : ViewModel() {
     )
 
     fun onAction(action: UserAction) {
+        if (isComputerPlaying) return
         when (action) {
             is UserAction.BoardTapped -> {
                 addValueToBoard(action.cellNo)
+                if (state.currentTurn == BoardCellValue.CROSS) {
+                    isComputerPlaying = true
+                    computerPlay()
+                    isComputerPlaying = false
+                }
             }
 
             UserAction.PlayAgainButtonClicked -> {
-                gameReset()
+                if (state.hasWon || hasBoardFull()) {
+                    gameReset()
+                }
             }
         }
     }
@@ -36,12 +47,50 @@ class GameViewModel : ViewModel() {
         boardItems.forEach { (i, _) ->
             boardItems[i] = BoardCellValue.NONE
         }
+
+        val newStartingPlayer =
+            if (state.startingPlayer == BoardCellValue.CIRCLE) BoardCellValue.CROSS else BoardCellValue.CIRCLE
+
         state = state.copy(
+            startingPlayer = newStartingPlayer,
+            currentTurn = newStartingPlayer,
             hintText = "Player '0' turn",
-            currentTurn = BoardCellValue.CIRCLE,
             victoryType = VictoryType.NONE,
             hasWon = false
         )
+
+        if (state.currentTurn == BoardCellValue.CROSS) {
+            isComputerPlaying = true
+            computerPlay()
+            isComputerPlaying = false
+        }
+    }
+
+
+    private fun computerPlay() {
+        val winningMove = findWinningMove(BoardCellValue.CROSS)
+        val blockingMove = findWinningMove(BoardCellValue.CIRCLE)
+
+        when {
+            winningMove != null -> addValueToBoard(winningMove)
+            blockingMove != null -> addValueToBoard(blockingMove)
+            boardItems[5] == BoardCellValue.NONE -> addValueToBoard(5)
+            else -> addValueToBoard(boardItems.filter { it.value == BoardCellValue.NONE }.keys.random())
+        }
+    }
+
+    private fun findWinningMove(player: BoardCellValue): Int? {
+        for (i in 1..9) {
+            if (boardItems[i] == BoardCellValue.NONE) {
+                boardItems[i] = player
+                if (checkForVictory(player)) {
+                    boardItems[i] = BoardCellValue.NONE
+                    return i
+                }
+                boardItems[i] = BoardCellValue.NONE
+            }
+        }
+        return null
     }
 
     private fun addValueToBoard(cellNo: Int) {
